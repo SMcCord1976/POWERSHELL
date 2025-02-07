@@ -1,0 +1,31 @@
+# NOTE THAT IF THE PRE-WINDOWS 2000 VALUE WITHIN THE GROUP PROPERTIES IN AD IS JACKED UP THIS SCRIPT WILL BOMB WITH A CANNOT FIND GROUP ERROR
+
+Import-Module ActiveDirectory
+
+# Get the AD group name
+$groupName = "P-SQL-PRD-NERVE-default_datareader"
+
+# Specify the path to the CSV file
+$csvPath = "S:\Nerve_Read_Group_User_List_20250207_TEST.csv"
+
+# Import the CSV file
+$users = Import-Csv -Path $csvPath
+
+# Add each user to the group
+foreach ($user in $users) {
+    $employeeID = $user.employeeID
+
+
+# Get the user object based on employeeID column in csv matching $employeeID attribute in AD
+    $adUser = Get-ADUser -Filter "employeeID -eq '$employeeID'"
+
+    if ($adUser) {
+        # Add the user to the group
+        Add-ADGroupMember -Identity $groupName -Members $adUser.DistinguishedName
+        Write-Host "Added $($adUser.SamAccountName) to $groupName"
+    } else {
+        Write-Host "User with EmployeeID $employeeID not found."
+    }
+}
+
+# NOTE THAT IF THE PRE-WINDOWS 2000 VALUE WITHIN THE GROUP PROPERTIES IN AD IS JACKED UP THIS SCRIPT WILL BOMB WITH A CANNOT FIND GROUP ERROR
