@@ -1,0 +1,78 @@
+
+# Define the UNC path to remote file share
+$FileSharePath = "\\INFSQLBackup\INFSQLBUNAStorage"
+
+# Define output CSV path (ensure this is writable by the SQL Agent account)
+$CsvPath = "W:\Reports\FileShareSpaceReport.csv"  # Adjust as needed
+
+# Function to format GB values directly
+function Format-Size {
+    param ([double]$GB)
+    "{0:N2} GB" -f $GB
+}
+
+try {
+# Check if the path is accessible
+    if (-not (Test-Path -Path $FileSharePath)) {
+        throw "The file share path '$FileSharePath' is not accessible. Check path or permissions."
+    }
+
+# Map the share to a temporary drive letter
+    $DriveLetter = "Z"  # Use an available letter; adjust if Z: is in use
+    if (Test-Path "$DriveLetter`:") {
+        throw "Drive letter $DriveLetter`: is already in use. Please choose another."
+    }
+
+# Map the network drive
+    New-PSDrive -Name $DriveLetter -PSProvider FileSystem -Root $FileSharePath -Persist -ErrorAction Stop
+    Write-Host "Mapped $FileSharePath to $DriveLetter`:" -ForegroundColor Cyan
+
+# Get disk info from the mapped drive
+    $Disk = Get-PSDrive -Name $DriveLetter
+    if (-not $Disk) {
+        throw "Could not retrieve disk information for the mapped drive."
+    }
+
+# Calculate sizes in GB (Get-PSDrive returns bytes)
+    $TotalSizeGB = ($Disk.Used + $Disk.Free) / (1024 * 1024 * 1024)  # Bytes to GB
+    $FreeSpaceGB = $Disk.Free / (1024 * 1024 * 1024)                 # Bytes to GB
+    $UsedSpaceGB = $Disk.Used / (1024 * 1024 * 1024)                 # Bytes to GB
+
+# Format the sizes in GB
+    $TotalSize = Format-Size -GB $TotalSizeGB
+    $FreeSpace = Format-Size -GB $FreeSpaceGB
+    $UsedSpace = Format-Size -GB $UsedSpaceGB
+
+# Calculate percentage used and free using GB
+    $PercentUsed = [math]::Round(($UsedSpaceGB / $TotalSizeGB) * 100, 2)
+    $PercentFree = [math]::Round(($FreeSpaceGB / $TotalSizeGB) * 100, 2)
+
+# Output the results
+    Write-Host "File Share: $FileSharePath" -ForegroundColor Cyan
+    Write-Host "Total Size: $TotalSize" -ForegroundColor Green
+    Write-Host "Used Space: $UsedSpace ($PercentUsed%)" -ForegroundColor Yellow
+    Write-Host "Free Space: $FreeSpace ($PercentFree%)" -ForegroundColor Green
+
+# Export to CSV
+    $Report = [PSCustomObject]@{
+        FileShare   = $FileSharePath
+        TotalSize   = $TotalSize
+        UsedSpace   = $UsedSpace
+        FreeSpace   = $FreeSpace
+        PercentUsed = "$PercentUsed%"
+        PercentFree = "$PercentFree%"
+        DateChecked = Get-Date
+    }
+    $Report | Export-Csv -Path $CsvPath -NoTypeInformation -Append
+    Write-Host "Report saved to $CsvPath" -ForegroundColor Cyan
+}
+catch {
+    Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+}
+finally {
+# Clean up: Remove the mapped drive if it was created
+    if (Test-Path "$DriveLetter`:") {
+        Remove-PSDrive -Name $DriveLetter -Force
+        Write-Host "Unmapped $DriveLetter`:" -ForegroundColor Cyan
+    }
+}
