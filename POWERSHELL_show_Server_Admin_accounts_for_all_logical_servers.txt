@@ -1,0 +1,37 @@
+##The following may prompt a download of a powershell solution that contains prerequisite modules.
+#Install-Module -Name Az -Scope CurrentUser -Repository PSGallery -Force
+
+
+##The following enables a browser window to select an authentication account
+#Update-AzConfig -EnableLoginByWam $false
+
+
+##The following prompts for a browser login to be used to authenticate
+#Connect-AzAccount
+
+
+# Get all subscriptions you have access to
+$subscriptions = Get-AzSubscription
+
+# Initialize output array
+$serverAdmins = @()
+
+foreach ($sub in $subscriptions) {
+    Set-AzContext -Subscription $sub.Id
+    $servers = Get-AzSqlServer
+
+    foreach ($server in $servers) {
+        $serverAdmins += [PSCustomObject]@{
+            SubscriptionId = $sub.Id
+            ResourceGroupName = $server.ResourceGroupName
+            ServerName = $server.ServerName
+            AdminLogin = $server.SqlAdministratorLogin
+        }
+    }
+}
+
+# Display results
+$serverAdmins | Format-Table -AutoSize
+
+# Optionally, export to CSV
+#$serverAdmins | Export-Csv -Path "AzureSQLServerAdmins.csv" -NoTypeInformation
